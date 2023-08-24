@@ -250,11 +250,11 @@ func TestIntegration_StorageReadQueryOrdering(t *testing.T) {
 		}
 		total++ // as we read the first value separately
 
-		bqSession := it.arrowIterator.session.bqSession
+		bqSession := it.ArrowIterator.session.bqSession
 		if len(bqSession.Streams) == 0 {
 			t.Fatalf("%s: expected to use at least one stream but found %d", tc.name, len(bqSession.Streams))
 		}
-		streamSettings := it.arrowIterator.session.settings.maxStreamCount
+		streamSettings := it.ArrowIterator.session.settings.maxStreamCount
 		if tc.maxExpectedStreams > 0 {
 			if streamSettings > tc.maxExpectedStreams {
 				t.Fatalf("%s: expected stream settings to be at most %d streams but found %d", tc.name, tc.maxExpectedStreams, streamSettings)
@@ -317,7 +317,7 @@ func TestIntegration_StorageReadQueryStruct(t *testing.T) {
 		total++
 	}
 
-	bqSession := it.arrowIterator.session.bqSession
+	bqSession := it.ArrowIterator.session.bqSession
 	if len(bqSession.Streams) == 0 {
 		t.Fatalf("should use more than one stream but found %d", len(bqSession.Streams))
 	}
@@ -366,7 +366,7 @@ func TestIntegration_StorageReadQueryMorePages(t *testing.T) {
 	}
 	total++ // as we read the first value separately
 
-	bqSession := it.arrowIterator.session.bqSession
+	bqSession := it.ArrowIterator.session.bqSession
 	if len(bqSession.Streams) == 0 {
 		t.Fatalf("should use more than one stream but found %d", len(bqSession.Streams))
 	}
@@ -418,7 +418,7 @@ func TestIntegration_StorageReadCancel(t *testing.T) {
 	}
 	// resources are cleaned asynchronously
 	time.Sleep(time.Second)
-	if !it.arrowIterator.isDone() {
+	if !it.ArrowIterator.isDone() {
 		t.Fatal("expected stream to be done")
 	}
 }

@@ -44,7 +44,7 @@ type RowIterator struct {
 	ctx context.Context
 	src *rowSource
 
-	arrowIterator *arrowIterator
+	ArrowIterator *ArrowIterator
 
 	pageInfo *iterator.PageInfo
 	nextFunc func() error

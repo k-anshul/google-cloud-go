@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,15 +33,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// arrowIterator is a raw interface for getting data from Storage Read API
-type arrowIterator struct {
+// ArrowIterator is a raw interface for getting data from Storage Read API
+type ArrowIterator struct {
 	done uint32 // atomic flag
 	errs chan error
 	ctx  context.Context
 
 	schema  Schema
-	decoder *arrowDecoder
+	Decoder *ArrowDecoder
 	records chan arrowRecordBatch
+	t       time.Duration
 
 	session *readSession
 }
@@ -60,7 +62,7 @@ func newStorageRowIteratorFromTable(ctx context.Context, table *Table, ordered b
 	if err != nil {
 		return nil, err
 	}
-	it.arrowIterator.schema = md.Schema
+	it.ArrowIterator.schema = md.Schema
 	it.Schema = md.Schema
 	return it, nil
 }
@@ -112,8 +114,8 @@ func resolveLastChildSelectJob(ctx context.Context, job *Job) (*Job, error) {
 	return childJobs[0], nil
 }
 
-func newRawStorageRowIterator(rs *readSession) (*arrowIterator, error) {
-	arrowIt := &arrowIterator{
+func newRawStorageRowIterator(rs *readSession) (*ArrowIterator, error) {
+	arrowIt := &ArrowIterator{
 		ctx:     rs.ctx,
 		session: rs,
 		records: make(chan arrowRecordBatch, rs.settings.maxWorkerCount+1),
@@ -136,7 +138,7 @@ func newStorageRowIterator(rs *readSession) (*RowIterator, error) {
 	totalRows := arrowIt.session.bqSession.EstimatedRowCount
 	it := &RowIterator{
 		ctx:           rs.ctx,
-		arrowIterator: arrowIt,
+		ArrowIterator: arrowIt,
 		TotalRows:     uint64(totalRows),
 		rows:          [][]Value{},
 	}
@@ -153,8 +155,8 @@ func nextFuncForStorageIterator(it *RowIterator) func() error {
 		if len(it.rows) > 0 {
 			return nil
 		}
-		arrowIt := it.arrowIterator
-		record, err := arrowIt.next()
+		arrowIt := it.ArrowIterator
+		record, err := arrowIt.Next()
 		if err == iterator.Done {
 			if len(it.rows) == 0 {
 				return iterator.Done
@@ -165,9 +167,9 @@ func nextFuncForStorageIterator(it *RowIterator) func() error {
 			return err
 		}
 		if it.Schema == nil {
-			it.Schema = it.arrowIterator.schema
+			it.Schema = it.ArrowIterator.schema
 		}
-		rows, err := arrowIt.decoder.decodeArrowRecords(record)
+		rows, err := arrowIt.Decoder.decodeArrowRecords(record)
 		if err != nil {
 			return err
 		}
@@ -176,8 +178,8 @@ func nextFuncForStorageIterator(it *RowIterator) func() error {
 	}
 }
 
-func (it *arrowIterator) init() error {
-	if it.decoder != nil { // Already initialized
+func (it *ArrowIterator) init() error {
+	if it.Decoder != nil { // Already initialized
 		return nil
 	}
 
@@ -190,6 +192,7 @@ func (it *arrowIterator) init() error {
 	if len(streams) == 0 {
 		return iterator.Done
 	}
+	log.Printf("number of streams %v", len(streams))
 
 	if it.schema == nil {
 		meta, err := it.session.table.Metadata(it.ctx)
@@ -203,7 +206,7 @@ func (it *arrowIterator) init() error {
 	if err != nil {
 		return err
 	}
-	it.decoder = decoder
+	it.Decoder = decoder
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(streams))
@@ -213,6 +216,7 @@ func (it *arrowIterator) init() error {
 		close(it.records)
 		close(it.errs)
 		it.markDone()
+		log.Printf("time taken %v", it.t.Seconds())
 	}()
 
 	go func() {
@@ -232,15 +236,15 @@ func (it *arrowIterator) init() error {
 	return nil
 }
 
-func (it *arrowIterator) markDone() {
+func (it *ArrowIterator) markDone() {
 	atomic.StoreUint32(&it.done, 1)
 }
 
-func (it *arrowIterator) isDone() bool {
+func (it *ArrowIterator) isDone() bool {
 	return atomic.LoadUint32(&it.done) != 0
 }
 
-func (it *arrowIterator) processStream(readStream string) {
+func (it *ArrowIterator) processStream(readStream string) {
 	bo := gax.Backoff{}
 	var offset int64
 	for {
@@ -254,6 +258,7 @@ func (it *arrowIterator) processStream(readStream string) {
 			}
 			backoff, shouldRetry := retryReadRows(bo, err)
 			if shouldRetry {
+				log.Printf("retry")
 				if err := gax.Sleep(it.ctx, backoff); err != nil {
 					return // context cancelled
 				}
@@ -292,7 +297,7 @@ func retryReadRows(bo gax.Backoff, err error) (time.Duration, bool) {
 	return bo.Pause(), false
 }
 
-func (it *arrowIterator) consumeRowStream(readStream string, rowStream storagepb.BigQueryRead_ReadRowsClient, offset int64) (int64, error) {
+func (it *ArrowIterator) consumeRowStream(readStream string, rowStream storagepb.BigQueryRead_ReadRowsClient, offset int64) (int64, error) {
 	for {
 		r, err := rowStream.Recv()
 		if err != nil {
@@ -306,13 +311,20 @@ func (it *arrowIterator) consumeRowStream(readStream string, rowStream storagepb
 			arrowRecordBatch := r.GetArrowRecordBatch()
 			it.records <- arrowRecordBatch.SerializedRecordBatch
 		}
+		if r.ThrottleState != nil {
+			log.Printf("throttled %v", r.ThrottleState.ThrottlePercent)
+		}
 	}
 }
 
-// next return the next batch of rows as an arrow.Record.
+// Next return the Next batch of rows as an arrow.Record.
 // Accessing Arrow Records directly has the drawnback of having to deal
 // with memory management.
-func (it *arrowIterator) next() (arrowRecordBatch, error) {
+func (it *ArrowIterator) Next() (arrowRecordBatch, error) {
+	t := time.Now()
+	defer func() {
+		it.t += time.Since(t)
+	}()
 	if err := it.init(); err != nil {
 		return nil, err
 	}
@@ -338,5 +350,5 @@ func (it *arrowIterator) next() (arrowRecordBatch, error) {
 // IsAccelerated check if the current RowIterator is
 // being accelerated by Storage API.
 func (it *RowIterator) IsAccelerated() bool {
-	return it.arrowIterator != nil
+	return it.ArrowIterator != nil
 }
