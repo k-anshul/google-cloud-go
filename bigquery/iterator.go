@@ -44,7 +44,7 @@ type RowIterator struct {
 	ctx context.Context
 	src *rowSource
 
-	ArrowIterator *ArrowIterator
+	arrowIterator *arrowIterator
 
 	pageInfo *iterator.PageInfo
 	nextFunc func() error
@@ -192,6 +192,21 @@ func (it *RowIterator) fetch(pageSize int, pageToken string) (string, error) {
 	}
 	it.TotalRows = res.totalRows
 	return res.pageToken, nil
+}
+
+// arrowIterator is a raw interface for getting data from Storage Read API in arrow format
+type ArrowIterator struct {
+	r *RowIterator
+}
+
+// NextRecord returns next batch of rows as serialised arrow.Record
+func (a *ArrowIterator) NextRecord() ([]byte, error) {
+	return a.r.arrowIterator.next()
+}
+
+// Schema is available after first call to NextRecord
+func (a *ArrowIterator) Schema() []byte {
+	return a.r.arrowIterator.decoder.RawArrowSchema
 }
 
 // rowSource represents one of the multiple sources of data for a row iterator.

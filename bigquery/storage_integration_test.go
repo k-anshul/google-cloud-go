@@ -37,7 +37,7 @@ func TestIntegration_StorageReadBasicTypes(t *testing.T) {
 	for _, c := range queryParameterTestCases {
 		q := storageOptimizedClient.Query(c.query)
 		q.Parameters = c.parameters
-		q.ForceStorageAPI = true
+		q.forceStorageAPI = true
 		it, err := q.Read(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -131,7 +131,7 @@ ORDER BY num`
 		t.Fatalf("reading job should use Storage API")
 	}
 	q.Dst = nil
-	q.ForceStorageAPI = true
+	q.forceStorageAPI = true
 	qRowIt, err := q.Read(ctx)
 	if err != nil {
 		t.Fatalf("ReadQuery(query): %v", err)
@@ -176,7 +176,7 @@ CREATE TABLE %s.%s ( num INT64, str STRING );
 DROP TABLE %s.%s;
 `, dataset.DatasetID, tableID, dataset.DatasetID, tableID)
 	q := storageOptimizedClient.Query(sql)
-	q.ForceStorageAPI = true
+	q.forceStorageAPI = true
 	it, err := q.Read(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestIntegration_StorageReadQueryOrdering(t *testing.T) {
 
 	for _, tc := range testCases {
 		q := storageOptimizedClient.Query(tc.query)
-		q.ForceStorageAPI = true
+		q.forceStorageAPI = true
 
 		it, err := q.Read(ctx)
 		if err != nil {
@@ -250,11 +250,11 @@ func TestIntegration_StorageReadQueryOrdering(t *testing.T) {
 		}
 		total++ // as we read the first value separately
 
-		bqSession := it.ArrowIterator.session.bqSession
+		bqSession := it.arrowIterator.session.bqSession
 		if len(bqSession.Streams) == 0 {
 			t.Fatalf("%s: expected to use at least one stream but found %d", tc.name, len(bqSession.Streams))
 		}
-		streamSettings := it.ArrowIterator.session.settings.maxStreamCount
+		streamSettings := it.arrowIterator.session.settings.maxStreamCount
 		if tc.maxExpectedStreams > 0 {
 			if streamSettings > tc.maxExpectedStreams {
 				t.Fatalf("%s: expected stream settings to be at most %d streams but found %d", tc.name, tc.maxExpectedStreams, streamSettings)
@@ -284,7 +284,7 @@ func TestIntegration_StorageReadQueryStruct(t *testing.T) {
 	table := "`bigquery-public-data.samples.wikipedia`"
 	sql := fmt.Sprintf(`SELECT id, title, timestamp, comment FROM %s LIMIT 1000`, table)
 	q := storageOptimizedClient.Query(sql)
-	q.ForceStorageAPI = true
+	q.forceStorageAPI = true
 	q.DisableQueryCache = true
 	it, err := q.Read(ctx)
 	if err != nil {
@@ -317,7 +317,7 @@ func TestIntegration_StorageReadQueryStruct(t *testing.T) {
 		total++
 	}
 
-	bqSession := it.ArrowIterator.session.bqSession
+	bqSession := it.arrowIterator.session.bqSession
 	if len(bqSession.Streams) == 0 {
 		t.Fatalf("should use more than one stream but found %d", len(bqSession.Streams))
 	}
@@ -366,7 +366,7 @@ func TestIntegration_StorageReadQueryMorePages(t *testing.T) {
 	}
 	total++ // as we read the first value separately
 
-	bqSession := it.ArrowIterator.session.bqSession
+	bqSession := it.arrowIterator.session.bqSession
 	if len(bqSession.Streams) == 0 {
 		t.Fatalf("should use more than one stream but found %d", len(bqSession.Streams))
 	}
@@ -387,7 +387,7 @@ func TestIntegration_StorageReadCancel(t *testing.T) {
 	storageOptimizedClient.rc.settings.maxWorkerCount = 1
 	q := storageOptimizedClient.Query(sql)
 	q.DisableQueryCache = true
-	q.ForceStorageAPI = true
+	q.forceStorageAPI = true
 	it, err := q.Read(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -418,7 +418,7 @@ func TestIntegration_StorageReadCancel(t *testing.T) {
 	}
 	// resources are cleaned asynchronously
 	time.Sleep(time.Second)
-	if !it.ArrowIterator.isDone() {
+	if !it.arrowIterator.isDone() {
 		t.Fatal("expected stream to be done")
 	}
 }

@@ -33,14 +33,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ArrowIterator is a raw interface for getting data from Storage Read API
-type ArrowIterator struct {
+// arrowIterator is a raw interface for getting data from Storage Read API
+type arrowIterator struct {
 	done uint32 // atomic flag
 	errs chan error
 	ctx  context.Context
 
 	schema  Schema
-	Decoder *ArrowDecoder
+	decoder *ArrowDecoder
 	records chan arrowRecordBatch
 	t       time.Duration
 
@@ -62,7 +62,7 @@ func newStorageRowIteratorFromTable(ctx context.Context, table *Table, ordered b
 	if err != nil {
 		return nil, err
 	}
-	it.ArrowIterator.schema = md.Schema
+	it.arrowIterator.schema = md.Schema
 	it.Schema = md.Schema
 	return it, nil
 }
@@ -114,8 +114,8 @@ func resolveLastChildSelectJob(ctx context.Context, job *Job) (*Job, error) {
 	return childJobs[0], nil
 }
 
-func newRawStorageRowIterator(rs *readSession) (*ArrowIterator, error) {
-	arrowIt := &ArrowIterator{
+func newRawStorageRowIterator(rs *readSession) (*arrowIterator, error) {
+	arrowIt := &arrowIterator{
 		ctx:     rs.ctx,
 		session: rs,
 		records: make(chan arrowRecordBatch, rs.settings.maxWorkerCount+1),
@@ -138,7 +138,7 @@ func newStorageRowIterator(rs *readSession) (*RowIterator, error) {
 	totalRows := arrowIt.session.bqSession.EstimatedRowCount
 	it := &RowIterator{
 		ctx:           rs.ctx,
-		ArrowIterator: arrowIt,
+		arrowIterator: arrowIt,
 		TotalRows:     uint64(totalRows),
 		rows:          [][]Value{},
 	}
@@ -155,8 +155,8 @@ func nextFuncForStorageIterator(it *RowIterator) func() error {
 		if len(it.rows) > 0 {
 			return nil
 		}
-		arrowIt := it.ArrowIterator
-		record, err := arrowIt.Next()
+		arrowIt := it.arrowIterator
+		record, err := arrowIt.next()
 		if err == iterator.Done {
 			if len(it.rows) == 0 {
 				return iterator.Done
@@ -167,9 +167,9 @@ func nextFuncForStorageIterator(it *RowIterator) func() error {
 			return err
 		}
 		if it.Schema == nil {
-			it.Schema = it.ArrowIterator.schema
+			it.Schema = it.arrowIterator.schema
 		}
-		rows, err := arrowIt.Decoder.decodeArrowRecords(record)
+		rows, err := arrowIt.decoder.decodeArrowRecords(record)
 		if err != nil {
 			return err
 		}
@@ -178,8 +178,8 @@ func nextFuncForStorageIterator(it *RowIterator) func() error {
 	}
 }
 
-func (it *ArrowIterator) init() error {
-	if it.Decoder != nil { // Already initialized
+func (it *arrowIterator) init() error {
+	if it.decoder != nil { // Already initialized
 		return nil
 	}
 
@@ -206,7 +206,7 @@ func (it *ArrowIterator) init() error {
 	if err != nil {
 		return err
 	}
-	it.Decoder = decoder
+	it.decoder = decoder
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(streams))
@@ -236,15 +236,15 @@ func (it *ArrowIterator) init() error {
 	return nil
 }
 
-func (it *ArrowIterator) markDone() {
+func (it *arrowIterator) markDone() {
 	atomic.StoreUint32(&it.done, 1)
 }
 
-func (it *ArrowIterator) isDone() bool {
+func (it *arrowIterator) isDone() bool {
 	return atomic.LoadUint32(&it.done) != 0
 }
 
-func (it *ArrowIterator) processStream(readStream string) {
+func (it *arrowIterator) processStream(readStream string) {
 	bo := gax.Backoff{}
 	var offset int64
 	for {
@@ -297,7 +297,7 @@ func retryReadRows(bo gax.Backoff, err error) (time.Duration, bool) {
 	return bo.Pause(), false
 }
 
-func (it *ArrowIterator) consumeRowStream(readStream string, rowStream storagepb.BigQueryRead_ReadRowsClient, offset int64) (int64, error) {
+func (it *arrowIterator) consumeRowStream(readStream string, rowStream storagepb.BigQueryRead_ReadRowsClient, offset int64) (int64, error) {
 	for {
 		r, err := rowStream.Recv()
 		if err != nil {
@@ -317,10 +317,10 @@ func (it *ArrowIterator) consumeRowStream(readStream string, rowStream storagepb
 	}
 }
 
-// Next return the Next batch of rows as an arrow.Record.
+// next return the next batch of rows as an arrow.Record.
 // Accessing Arrow Records directly has the drawnback of having to deal
 // with memory management.
-func (it *ArrowIterator) Next() (arrowRecordBatch, error) {
+func (it *arrowIterator) next() (arrowRecordBatch, error) {
 	t := time.Now()
 	defer func() {
 		it.t += time.Since(t)
@@ -350,5 +350,5 @@ func (it *ArrowIterator) Next() (arrowRecordBatch, error) {
 // IsAccelerated check if the current RowIterator is
 // being accelerated by Storage API.
 func (it *RowIterator) IsAccelerated() bool {
-	return it.ArrowIterator != nil
+	return it.arrowIterator != nil
 }
