@@ -39,7 +39,7 @@ type arrowIterator struct {
 	ctx  context.Context
 
 	schema  Schema
-	decoder *ArrowDecoder
+	decoder *arrowDecoder
 	records chan arrowRecordBatch
 
 	session *readSession

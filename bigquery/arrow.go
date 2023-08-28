@@ -27,13 +27,13 @@ import (
 	"github.com/apache/arrow/go/v12/arrow/ipc"
 )
 
-type ArrowDecoder struct {
+type arrowDecoder struct {
 	tableSchema    Schema
-	RawArrowSchema []byte
+	rawArrowSchema []byte
 	arrowSchema    *arrow.Schema
 }
 
-func newArrowDecoderFromSession(session *readSession, schema Schema) (*ArrowDecoder, error) {
+func newArrowDecoderFromSession(session *readSession, schema Schema) (*arrowDecoder, error) {
 	bqSession := session.bqSession
 	if bqSession == nil {
 		return nil, errors.New("read session not initialized")
@@ -45,22 +45,22 @@ func newArrowDecoderFromSession(session *readSession, schema Schema) (*ArrowDeco
 		return nil, err
 	}
 	defer r.Release()
-	p := &ArrowDecoder{
+	p := &arrowDecoder{
 		tableSchema:    schema,
-		RawArrowSchema: arrowSerializedSchema,
+		rawArrowSchema: arrowSerializedSchema,
 		arrowSchema:    r.Schema(),
 	}
 	return p, nil
 }
 
-func (ap *ArrowDecoder) createIPCReaderForBatch(serializedArrowRecordBatch []byte) (*ipc.Reader, error) {
-	buf := bytes.NewBuffer(ap.RawArrowSchema)
+func (ap *arrowDecoder) createIPCReaderForBatch(serializedArrowRecordBatch []byte) (*ipc.Reader, error) {
+	buf := bytes.NewBuffer(ap.rawArrowSchema)
 	buf.Write(serializedArrowRecordBatch)
 	return ipc.NewReader(buf, ipc.WithSchema(ap.arrowSchema))
 }
 
 // decodeArrowRecords decodes BQ ArrowRecordBatch into rows of []Value.
-func (ap *ArrowDecoder) decodeArrowRecords(serializedArrowRecordBatch []byte) ([][]Value, error) {
+func (ap *arrowDecoder) decodeArrowRecords(serializedArrowRecordBatch []byte) ([][]Value, error) {
 	r, err := ap.createIPCReaderForBatch(serializedArrowRecordBatch)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (ap *ArrowDecoder) decodeArrowRecords(serializedArrowRecordBatch []byte) ([
 }
 
 // decodeRetainedArrowRecords decodes BQ ArrowRecordBatch into a list of retained arrow.Record.
-func (ap *ArrowDecoder) decodeRetainedArrowRecords(serializedArrowRecordBatch []byte) ([]arrow.Record, error) {
+func (ap *arrowDecoder) decodeRetainedArrowRecords(serializedArrowRecordBatch []byte) ([]arrow.Record, error) {
 	r, err := ap.createIPCReaderForBatch(serializedArrowRecordBatch)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (ap *ArrowDecoder) decodeRetainedArrowRecords(serializedArrowRecordBatch []
 }
 
 // convertArrowRows converts an arrow.Record into a series of Value slices.
-func (ap *ArrowDecoder) convertArrowRecordValue(record arrow.Record) ([][]Value, error) {
+func (ap *arrowDecoder) convertArrowRecordValue(record arrow.Record) ([][]Value, error) {
 	rs := make([][]Value, record.NumRows())
 	for i := range rs {
 		rs[i] = make([]Value, record.NumCols())

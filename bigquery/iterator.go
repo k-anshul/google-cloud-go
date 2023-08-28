@@ -206,7 +206,7 @@ func (a *ArrowIterator) NextRecord() ([]byte, error) {
 
 // Schema is available after first call to NextRecord
 func (a *ArrowIterator) Schema() []byte {
-	return a.r.arrowIterator.decoder.RawArrowSchema
+	return a.r.arrowIterator.decoder.rawArrowSchema
 }
 
 // rowSource represents one of the multiple sources of data for a row iterator.
