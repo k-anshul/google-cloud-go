@@ -380,7 +380,7 @@ func (q *Query) ReadAsArrowObjects(ctx context.Context) (it *ArrowIterator, err 
 		return nil, err
 	}
 
-	if rowIter.arrowIterator != nil {
+	if rowIter.arrowIterator == nil {
 		return nil, errors.New("bigquery: results not available as arrow records")
 	}
 
