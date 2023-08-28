@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,7 +41,6 @@ type arrowIterator struct {
 	schema  Schema
 	decoder *ArrowDecoder
 	records chan arrowRecordBatch
-	t       time.Duration
 
 	session *readSession
 }
@@ -192,7 +190,6 @@ func (it *arrowIterator) init() error {
 	if len(streams) == 0 {
 		return iterator.Done
 	}
-	log.Printf("number of streams %v", len(streams))
 
 	if it.schema == nil {
 		meta, err := it.session.table.Metadata(it.ctx)
@@ -216,7 +213,6 @@ func (it *arrowIterator) init() error {
 		close(it.records)
 		close(it.errs)
 		it.markDone()
-		log.Printf("time taken %v", it.t.Seconds())
 	}()
 
 	go func() {
@@ -258,7 +254,6 @@ func (it *arrowIterator) processStream(readStream string) {
 			}
 			backoff, shouldRetry := retryReadRows(bo, err)
 			if shouldRetry {
-				log.Printf("retry")
 				if err := gax.Sleep(it.ctx, backoff); err != nil {
 					return // context cancelled
 				}
@@ -311,9 +306,6 @@ func (it *arrowIterator) consumeRowStream(readStream string, rowStream storagepb
 			arrowRecordBatch := r.GetArrowRecordBatch()
 			it.records <- arrowRecordBatch.SerializedRecordBatch
 		}
-		if r.ThrottleState != nil {
-			log.Printf("throttled %v", r.ThrottleState.ThrottlePercent)
-		}
 	}
 }
 
@@ -321,10 +313,6 @@ func (it *arrowIterator) consumeRowStream(readStream string, rowStream storagepb
 // Accessing Arrow Records directly has the drawnback of having to deal
 // with memory management.
 func (it *arrowIterator) next() (arrowRecordBatch, error) {
-	t := time.Now()
-	defer func() {
-		it.t += time.Since(t)
-	}()
 	if err := it.init(); err != nil {
 		return nil, err
 	}

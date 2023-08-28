@@ -141,8 +141,7 @@ func (rs *readSession) start() error {
 			Table:      rs.tableID,
 			DataFormat: storagepb.DataFormat_ARROW,
 		},
-		MaxStreamCount:          int32(rs.settings.maxStreamCount),
-		PreferredMinStreamCount: 4 * int32(rs.settings.maxWorkerCount),
+		MaxStreamCount: int32(rs.settings.maxStreamCount),
 	}
 	rpcOpts := gax.WithGRPCOptions(
 		// Read API can send batches up to 128MB
