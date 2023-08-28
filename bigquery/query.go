@@ -384,7 +384,7 @@ func (q *Query) ReadAsArrowObjects(ctx context.Context) (it *ArrowIterator, err 
 		return nil, errors.New("bigquery: results not available as arrow records")
 	}
 
-	return &ArrowIterator{r: rowIter}, nil
+	return newArrowIterator(rowIter), nil
 }
 
 // Read submits a query for execution and returns the results via a RowIterator.

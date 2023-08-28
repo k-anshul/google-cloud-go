@@ -194,9 +194,11 @@ func (it *RowIterator) fetch(pageSize int, pageToken string) (string, error) {
 	return res.pageToken, nil
 }
 
-// arrowIterator is a raw interface for getting data from Storage Read API in arrow format
+// ArrowIterator is a raw interface for getting data from Storage Read API in arrow format
 type ArrowIterator struct {
-	r *RowIterator
+	// TotalRows is the estimated total number of rows in the result.
+	TotalRows uint64 
+	r         *RowIterator
 }
 
 // NextRecord returns next batch of rows as serialised arrow.Record
@@ -207,6 +209,14 @@ func (a *ArrowIterator) NextRecord() ([]byte, error) {
 // Schema is available after first call to NextRecord
 func (a *ArrowIterator) Schema() []byte {
 	return a.r.arrowIterator.decoder.rawArrowSchema
+}
+
+func newArrowIterator(iter *RowIterator) *ArrowIterator {
+	totalRows := iter.arrowIterator.session.bqSession.EstimatedRowCount
+	return &ArrowIterator{
+		TotalRows: uint64(totalRows),
+		r:         iter,
+	}
 }
 
 // rowSource represents one of the multiple sources of data for a row iterator.
