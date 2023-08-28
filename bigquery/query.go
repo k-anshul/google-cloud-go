@@ -366,6 +366,27 @@ func (q *Query) newJob() (*bq.Job, error) {
 	}, nil
 }
 
+// ReadAsArrowObjects submits a query for execution and returns the results via an ArrowIterator.
+// As a prerequisite storage read client should be enabled.
+// It will always use jobs.insert path so may not be efficient for small queries.
+func (q *Query) ReadAsArrowObjects(ctx context.Context) (it *ArrowIterator, err error) {
+	if !q.client.isStorageReadAvailable() {
+		return nil, errors.New("bigquery: require storage read client for fetching records as arrow objects")
+	}
+
+	q.forceStorageAPI = true
+	rowIter, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if rowIter.arrowIterator != nil {
+		return nil, errors.New("bigquery: results not available as arrow records")
+	}
+
+	return &ArrowIterator{r: rowIter}, nil
+}
+
 // Read submits a query for execution and returns the results via a RowIterator.
 // If the request can be satisfied by running using the optimized query path, it
 // is used in place of the jobs.insert path as this path does not expose a job
