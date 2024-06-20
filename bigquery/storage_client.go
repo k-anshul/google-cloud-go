@@ -28,6 +28,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+const maxGRPCConnPoolSize = 4
+
 // readClient is a managed BigQuery Storage read client scoped to a single project.
 type readClient struct {
 	rawClient *storage.BigQueryReadClient
@@ -53,8 +55,8 @@ func defaultReadClientSettings() readClientSettings {
 // newReadClient instantiates a new storage read client.
 func newReadClient(ctx context.Context, projectID string, opts ...option.ClientOption) (c *readClient, err error) {
 	numConns := runtime.GOMAXPROCS(0)
-	if numConns > 4 {
-		numConns = 4
+	if numConns > maxGRPCConnPoolSize {
+		numConns = maxGRPCConnPoolSize
 	}
 	o := []option.ClientOption{
 		option.WithGRPCConnectionPool(numConns),
@@ -139,6 +141,9 @@ func (rs *readSession) start() error {
 	maxStreamCount := int32(rs.settings.maxStreamCount)
 	if maxStreamCount == 0 {
 		preferredMinStreamCount = int32(rs.settings.maxWorkerCount)
+		if preferredMinStreamCount > maxGRPCConnPoolSize {
+			preferredMinStreamCount = maxGRPCConnPoolSize
+		}
 	}
 	createReadSessionRequest := &storagepb.CreateReadSessionRequest{
 		Parent: fmt.Sprintf("projects/%s", rs.table.ProjectID),
